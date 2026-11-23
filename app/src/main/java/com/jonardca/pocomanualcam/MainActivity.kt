@@ -175,7 +175,7 @@ class MainActivity : AppCompatActivity() {
             val minFocus = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
             focusRange = Range(0f, minFocus)
 
-            imageReader = ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 2)
+            imageReader = ImageReader.newInstance(3472, 4624, ImageFormat.JPEG, 2)
             imageReader?.setOnImageAvailableListener({ reader ->
                 reader.acquireLatestImage()?.let { saveImage(it) }
             }, backgroundHandler)
@@ -288,12 +288,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openGallery() {
+    try {
+        // Try MIUI Gallery first
+        val miuiIntent = Intent(Intent.ACTION_VIEW).apply {
+            setClassName("com.miui.gallery", "com.miui.gallery.activity.HomePageActivity")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        startActivity(miuiIntent)
+    } catch (e: Exception) {
         try {
-            startActivity(Intent(Intent.ACTION_VIEW).apply { type = "image/*" })
-        } catch (e: Exception) {
+            // Fallback: open any image viewer / Photos
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                type = "image/*"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(Intent.createChooser(intent, "Open Gallery"))
+        } catch (e2: Exception) {
             Toast.makeText(this, "Cannot open gallery", Toast.LENGTH_SHORT).show()
         }
     }
+}
 
     private fun startBackgroundThread() {
         backgroundThread = HandlerThread("CameraBackground").also { it.start() }
