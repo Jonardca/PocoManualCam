@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.media.ImageReader
@@ -37,11 +38,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var focusSeekBar: SeekBar
     private lateinit var wbSeekBar: SeekBar
     private lateinit var evSeekBar: SeekBar
+    private lateinit var zoomSeekBar: SeekBar
+
     private lateinit var isoLabel: TextView
     private lateinit var shutterLabel: TextView
     private lateinit var focusLabel: TextView
     private lateinit var wbLabel: TextView
     private lateinit var evLabel: TextView
+    private lateinit var zoomLabel: TextView
+
     private lateinit var captureButton: Button
     private lateinit var galleryButton: Button
 
@@ -54,12 +59,14 @@ class MainActivity : AppCompatActivity() {
     private var isoRange: Range<Int>? = null
     private var exposureRange: Range<Long>? = null
     private var focusRange: Range<Float>? = null
+    private var sensorRect: Rect? = null
 
     private var currentIso = 100
     private var currentExposure = 30_000_000L
     private var currentFocus = 0f
     private var currentWb = CaptureRequest.CONTROL_AWB_MODE_AUTO
     private var currentEv = 0
+    private var currentZoom = 1.0f
 
     private val wbModes = arrayOf(
         CaptureRequest.CONTROL_AWB_MODE_AUTO,
@@ -85,11 +92,15 @@ class MainActivity : AppCompatActivity() {
         focusSeekBar = findViewById(R.id.focusSeekBar)
         wbSeekBar = findViewById(R.id.wbSeekBar)
         evSeekBar = findViewById(R.id.evSeekBar)
+        zoomSeekBar = findViewById(R.id.zoomSeekBar)
+
         isoLabel = findViewById(R.id.isoLabel)
         shutterLabel = findViewById(R.id.shutterLabel)
         focusLabel = findViewById(R.id.focusLabel)
         wbLabel = findViewById(R.id.wbLabel)
         evLabel = findViewById(R.id.evLabel)
+        zoomLabel = findViewById(R.id.zoomLabel)
+
         captureButton = findViewById(R.id.captureButton)
         galleryButton = findViewById(R.id.galleryButton)
 
@@ -164,16 +175,28 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
         evSeekBar.progress = 24
+
+        zoomSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                currentZoom = 1.0f + (progress / 100f) * 3.0f
+                zoomLabel.text = "Zoom: ${"%.1f".format(currentZoom)}x"
+                updatePreview()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
     }
 
     private fun openCamera() {
         try {
             val cameraId = cameraManager.cameraIdList[0]
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+
             isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
             exposureRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
             val minFocus = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
             focusRange = Range(0f, minFocus)
+            sensorRect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
 
             imageReader = ImageReader.newInstance(3472, 4624, ImageFormat.JPEG, 2)
             imageReader?.setOnImageAvailableListener({ reader ->
@@ -215,6 +238,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyZoom(builder: CaptureRequest.Builder) {
+        sensorRect?.let { rect ->
+            val centerX = rect.width() / 2
+            val centerY = rect.height() / 2
+            val halfWidth = (rect.width() / (2 * currentZoom)).toInt().coerceAtLeast(1)
+            val halfHeight = (rect.height() / (2 * currentZoom)).toInt().coerceAtLeast(1)
+
+            val crop = Rect(
+                (centerX - halfWidth).coerceAtLeast(0),
+                (centerY - halfHeight).coerceAtLeast(0),
+                (centerX + halfWidth).coerceAtMost(rect.width()),
+                (centerY + halfHeight).coerceAtMost(rect.height())
+            )
+            builder.set(CaptureRequest.SCALER_CROP_REGION, crop)
+        }
+    }
+
     private fun updatePreview() {
         val session = captureSession ?: return
         val device = cameraDevice ?: return
@@ -223,6 +263,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(texture))
+
             builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -231,6 +272,9 @@ class MainActivity : AppCompatActivity() {
             builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
             builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
+
+            applyZoom(builder)
+
             session.setRepeatingRequest(builder.build(), null, backgroundHandler)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -245,6 +289,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             builder.addTarget(readerSurface)
+
             builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -254,6 +299,9 @@ class MainActivity : AppCompatActivity() {
             builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
             builder.set(CaptureRequest.JPEG_ORIENTATION, 90)
+
+            applyZoom(builder)
+
             session.capture(builder.build(), null, backgroundHandler)
             runOnUiThread { Toast.makeText(this, "Photo saved!", Toast.LENGTH_SHORT).show() }
         } catch (e: Exception) {
@@ -266,7 +314,9 @@ class MainActivity : AppCompatActivity() {
         val bytes = ByteArray(buffer.remaining())
         buffer.get(bytes)
         image.close()
+
         val filename = "MANUAL_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
+
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
@@ -288,26 +338,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openGallery() {
-    try {
-        // Try MIUI Gallery first
-        val miuiIntent = Intent(Intent.ACTION_VIEW).apply {
-            setClassName("com.miui.gallery", "com.miui.gallery.activity.HomePageActivity")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        startActivity(miuiIntent)
-    } catch (e: Exception) {
         try {
-            // Fallback: open any image viewer / Photos
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                type = "image/*"
+            val miuiIntent = Intent(Intent.ACTION_VIEW).apply {
+                setClassName("com.miui.gallery", "com.miui.gallery.activity.HomePageActivity")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            startActivity(Intent.createChooser(intent, "Open Gallery"))
-        } catch (e2: Exception) {
-            Toast.makeText(this, "Cannot open gallery", Toast.LENGTH_SHORT).show()
+            startActivity(miuiIntent)
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    type = "image/*"
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(Intent.createChooser(intent, "Open Gallery"))
+            } catch (e2: Exception) {
+                Toast.makeText(this, "Cannot open gallery", Toast.LENGTH_SHORT).show()
+            }
         }
     }
-}
 
     private fun startBackgroundThread() {
         backgroundThread = HandlerThread("CameraBackground").also { it.start() }
