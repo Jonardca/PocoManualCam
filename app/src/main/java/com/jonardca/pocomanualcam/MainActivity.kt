@@ -2,11 +2,13 @@ package com.jonardca.pocomanualcam
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.media.ImageReader
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -35,10 +37,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var isoSeekBar: SeekBar
     private lateinit var shutterSeekBar: SeekBar
     private lateinit var focusSeekBar: SeekBar
+    private lateinit var wbSeekBar: SeekBar
+    private lateinit var evSeekBar: SeekBar
+
     private lateinit var isoLabel: TextView
     private lateinit var shutterLabel: TextView
     private lateinit var focusLabel: TextView
+    private lateinit var wbLabel: TextView
+    private lateinit var evLabel: TextView
+
     private lateinit var captureButton: Button
+    private lateinit var galleryButton: Button
 
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
@@ -49,10 +58,27 @@ class MainActivity : AppCompatActivity() {
     private var isoRange: Range<Int>? = null
     private var exposureRange: Range<Long>? = null
     private var focusRange: Range<Float>? = null
+    private var evRange: Range<Int>? = null
 
     private var currentIso = 100
-    private var currentExposure = 30_000_000L // \~1/30s
+    private var currentExposure = 30_000_000L
     private var currentFocus = 0f
+    private var currentWb = CaptureRequest.CONTROL_AWB_MODE_AUTO
+    private var currentEv = 0
+
+    private val wbModes = arrayOf(
+        CaptureRequest.CONTROL_AWB_MODE_AUTO,
+        CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT,
+        CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
+        CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT,
+        CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT,
+        CaptureRequest.CONTROL_AWB_MODE_TWILIGHT,
+        CaptureRequest.CONTROL_AWB_MODE_SHADE
+    )
+
+    private val wbNames = arrayOf(
+        "Auto", "Daylight", "Cloudy", "Incandescent", "Fluorescent", "Twilight", "Shade"
+    )
 
     private val cameraManager by lazy { getSystemService(CAMERA_SERVICE) as CameraManager }
 
@@ -64,10 +90,17 @@ class MainActivity : AppCompatActivity() {
         isoSeekBar = findViewById(R.id.isoSeekBar)
         shutterSeekBar = findViewById(R.id.shutterSeekBar)
         focusSeekBar = findViewById(R.id.focusSeekBar)
+        wbSeekBar = findViewById(R.id.wbSeekBar)
+        evSeekBar = findViewById(R.id.evSeekBar)
+
         isoLabel = findViewById(R.id.isoLabel)
         shutterLabel = findViewById(R.id.shutterLabel)
         focusLabel = findViewById(R.id.focusLabel)
+        wbLabel = findViewById(R.id.wbLabel)
+        evLabel = findViewById(R.id.evLabel)
+
         captureButton = findViewById(R.id.captureButton)
+        galleryButton = findViewById(R.id.galleryButton)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED) {
@@ -76,9 +109,8 @@ class MainActivity : AppCompatActivity() {
 
         setupSeekBars()
 
-        captureButton.setOnClickListener {
-            takePhoto()
-        }
+        captureButton.setOnClickListener { takePhoto() }
+        galleryButton.setOnClickListener { openGallery() }
     }
 
     private fun setupSeekBars() {
@@ -98,7 +130,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 exposureRange?.let {
                     val min = it.lower
-                    val max = minOf(it.upper, 1_000_000_000L) // max 1 second
+                    val max = minOf(it.upper, 1_000_000_000L)
                     currentExposure = min + (progress * (max - min) / 100)
                     val text = if (currentExposure >= 1_000_000_000L) {
                         String.format("%.1fs", currentExposure / 1_000_000_000.0)
@@ -124,6 +156,31 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+
+        wbSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val index = progress.coerceIn(0, wbModes.size - 1)
+                currentWb = wbModes[index]
+                wbLabel.text = "WB: ${wbNames[index]}"
+                updatePreview()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        evSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                // Map 0-48 to -24 to +24 (common range)
+                currentEv = progress - 24
+                evLabel.text = "EV: ${if (currentEv > 0) "+$currentEv" else currentEv}"
+                updatePreview()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        // Default EV center
+        evSeekBar.progress = 24
     }
 
     private fun openCamera() {
@@ -135,8 +192,8 @@ class MainActivity : AppCompatActivity() {
             exposureRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
             val minFocus = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
             focusRange = Range(0f, minFocus)
+            evRange = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
 
-            // Setup ImageReader for still capture (JPEG)
             imageReader = ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 2)
             imageReader?.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
@@ -180,166 +237,4 @@ class MainActivity : AppCompatActivity() {
             val surfaces = listOf(previewSurface, readerSurface)
 
             cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(session: CameraCaptureSession) {
-                    captureSession = session
-                    updatePreview()
-                }
-                override fun onConfigureFailed(session: CameraCaptureSession) {
-                    runOnUiThread {
-                        Toast.makeText(this@MainActivity, "Session failed", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }, backgroundHandler)
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun updatePreview() {
-        val session = captureSession ?: return
-        val device = cameraDevice ?: return
-        val texture = textureView.surfaceTexture ?: return
-
-        try {
-            val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            builder.addTarget(Surface(texture))
-
-            // Manual controls
-            builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
-
-            session.setRepeatingRequest(builder.build(), null, backgroundHandler)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun takePhoto() {
-        val session = captureSession ?: return
-        val device = cameraDevice ?: return
-        val readerSurface = imageReader?.surface ?: return
-
-        try {
-            val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            builder.addTarget(readerSurface)
-
-            // Same manual settings
-            builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
-            builder.set(CaptureRequest.JPEG_ORIENTATION, 90) // Portrait
-
-            session.capture(builder.build(), object : CameraCaptureSession.CaptureCallback() {
-                override fun onCaptureCompleted(
-                    session: CameraCaptureSession,
-                    request: CaptureRequest,
-                    result: TotalCaptureResult
-                ) {
-                    runOnUiThread {
-                        Toast.makeText(this@MainActivity, "Photo saved!", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }, backgroundHandler)
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "Capture failed: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun saveImage(image: android.media.Image) {
-        val buffer = image.planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-        image.close()
-
-        val filename = "MANUAL_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+ MediaStore
-                val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/PocoManualCam")
-                }
-                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                uri?.let {
-                    contentResolver.openOutputStream(it)?.use { out ->
-                        out.write(bytes)
-                    }
-                }
-            } else {
-                // Older Android
-                val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "PocoManualCam")
-                if (!dir.exists()) dir.mkdirs()
-                val file = File(dir, filename)
-                FileOutputStream(file).use { it.write(bytes) }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun startBackgroundThread() {
-        backgroundThread = HandlerThread("CameraBackground").also { it.start() }
-        backgroundHandler = Handler(backgroundThread!!.looper)
-    }
-
-    private fun stopBackgroundThread() {
-        backgroundThread?.quitSafely()
-        try {
-            backgroundThread?.join()
-            backgroundThread = null
-            backgroundHandler = null
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        startBackgroundThread()
-        if (textureView.isAvailable) {
-            openCamera()
-        } else {
-            textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                    openCamera()
-                }
-                override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
-                override fun onSurfaceTextureDestroyed(surface: SurfaceTexture) = true
-                override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
-            }
-        }
-    }
-
-    override fun onPause() {
-        captureSession?.close()
-        cameraDevice?.close()
-        imageReader?.close()
-        stopBackgroundThread()
-        super.onPause()
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            // Permission granted
-        } else {
-            Toast.makeText(this, "Camera permission required", Toast.LENGTH_LONG).show()
-        }
-    }
-}
+                override fun onConfigured(session: CameraCaptureSession
