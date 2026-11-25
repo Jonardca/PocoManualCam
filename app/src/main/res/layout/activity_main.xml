@@ -98,6 +98,21 @@
             android:layout_height="wrap_content"
             android:max="48" />
 
+        <!-- Zoom -->
+        <TextView
+            android:id="@+id/zoomLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Zoom: 1.0x"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:layout_marginTop="6dp" />
+        <SeekBar
+            android:id="@+id/zoomSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+
         <!-- Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
