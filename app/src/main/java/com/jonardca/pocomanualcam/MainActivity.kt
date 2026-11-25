@@ -18,7 +18,9 @@ import android.provider.MediaStore
 import android.util.Range
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -49,6 +51,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var captureButton: Button
     private lateinit var galleryButton: Button
+    private lateinit var seekBarsContainer: LinearLayout
+    private lateinit var toggleControls: TextView
 
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
@@ -67,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private var currentWb = CaptureRequest.CONTROL_AWB_MODE_AUTO
     private var currentEv = 0
     private var currentZoom = 1.0f
+    private var controlsVisible = true
 
     private val wbModes = arrayOf(
         CaptureRequest.CONTROL_AWB_MODE_AUTO,
@@ -103,14 +108,28 @@ class MainActivity : AppCompatActivity() {
 
         captureButton = findViewById(R.id.captureButton)
         galleryButton = findViewById(R.id.galleryButton)
+        seekBarsContainer = findViewById(R.id.seekBarsContainer)
+        toggleControls = findViewById(R.id.toggleControls)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
         }
 
         setupSeekBars()
+
         captureButton.setOnClickListener { takePhoto() }
         galleryButton.setOnClickListener { openGallery() }
+
+        toggleControls.setOnClickListener {
+            controlsVisible = !controlsVisible
+            if (controlsVisible) {
+                seekBarsContainer.visibility = View.VISIBLE
+                toggleControls.text = "▲ Hide Controls"
+            } else {
+                seekBarsContainer.visibility = View.GONE
+                toggleControls.text = "▼ Show Controls"
+            }
+        }
     }
 
     private fun setupSeekBars() {

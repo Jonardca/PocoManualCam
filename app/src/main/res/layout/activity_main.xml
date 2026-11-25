@@ -11,10 +11,11 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/controlsLayout"
+        app:layout_constraintBottom_toTopOf="@+id/bottomBar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Collapsible Controls -->
     <LinearLayout
         android:id="@+id/controlsLayout"
         android:layout_width="match_parent"
@@ -22,124 +23,76 @@
         android:orientation="vertical"
         android:padding="10dp"
         android:background="#CC000000"
+        app:layout_constraintBottom_toTopOf="@+id/bottomBar">
+
+        <!-- Toggle Button -->
+        <TextView
+            android:id="@+id/toggleControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▲ Hide Controls"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:padding="6dp"
+            android:background="#33FFFFFF" />
+
+        <!-- All SeekBars (can be hidden) -->
+        <LinearLayout
+            android:id="@+id/seekBarsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView android:id="@+id/isoLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ISO: Auto" android:textColor="#FFFFFF" android:textSize="13sp" />
+            <SeekBar android:id="@+id/isoSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+
+            <TextView android:id="@+id/shutterLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Shutter: Auto" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
+            <SeekBar android:id="@+id/shutterSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+
+            <TextView android:id="@+id/focusLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Focus: Auto" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
+            <SeekBar android:id="@+id/focusSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+
+            <TextView android:id="@+id/wbLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="WB: Auto" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
+            <SeekBar android:id="@+id/wbSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="6" />
+
+            <TextView android:id="@+id/evLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="EV: 0" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
+            <SeekBar android:id="@+id/evSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="48" />
+
+            <TextView android:id="@+id/zoomLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Zoom: 1.0x" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
+            <SeekBar android:id="@+id/zoomSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Always visible bottom bar -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="10dp"
+        android:background="#CC000000"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- ISO -->
-        <TextView
-            android:id="@+id/isoLabel"
-            android:layout_width="wrap_content"
+        <Button
+            android:id="@+id/captureButton"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="ISO: Auto"
+            android:layout_weight="1"
+            android:text="CAPTURE"
+            android:backgroundTint="#FF5722"
             android:textColor="#FFFFFF"
-            android:textSize="13sp" />
-        <SeekBar
-            android:id="@+id/isoSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100" />
+            android:layout_marginEnd="6dp" />
 
-        <!-- Shutter -->
-        <TextView
-            android:id="@+id/shutterLabel"
-            android:layout_width="wrap_content"
+        <Button
+            android:id="@+id/galleryButton"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Shutter: Auto"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginTop="6dp" />
-        <SeekBar
-            android:id="@+id/shutterSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100" />
-
-        <!-- Focus -->
-        <TextView
-            android:id="@+id/focusLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Focus: Auto"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginTop="6dp" />
-        <SeekBar
-            android:id="@+id/focusSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100" />
-
-        <!-- White Balance -->
-        <TextView
-            android:id="@+id/wbLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="WB: Auto"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginTop="6dp" />
-        <SeekBar
-            android:id="@+id/wbSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="6" />
-
-        <!-- EV -->
-        <TextView
-            android:id="@+id/evLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="EV: 0"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginTop="6dp" />
-        <SeekBar
-            android:id="@+id/evSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="48" />
-
-        <!-- Zoom -->
-        <TextView
-            android:id="@+id/zoomLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Zoom: 1.0x"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginTop="6dp" />
-        <SeekBar
-            android:id="@+id/zoomSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100" />
-
-        <!-- Buttons -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp">
-
-            <Button
-                android:id="@+id/captureButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="CAPTURE"
-                android:backgroundTint="#FF5722"
-                android:textColor="#FFFFFF"
-                android:layout_marginEnd="6dp" />
-
-            <Button
-                android:id="@+id/galleryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="GALLERY"
-                android:backgroundTint="#2196F3"
-                android:textColor="#FFFFFF" />
-        </LinearLayout>
-
+            android:layout_weight="1"
+            android:text="GALLERY"
+            android:backgroundTint="#2196F3"
+            android:textColor="#FFFFFF" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
