@@ -15,7 +15,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Collapsible Controls -->
     <LinearLayout
         android:id="@+id/controlsLayout"
         android:layout_width="match_parent"
@@ -25,7 +24,6 @@
         android:background="#CC000000"
         app:layout_constraintBottom_toTopOf="@+id/bottomBar">
 
-        <!-- Toggle Button -->
         <TextView
             android:id="@+id/toggleControls"
             android:layout_width="match_parent"
@@ -37,7 +35,6 @@
             android:padding="6dp"
             android:background="#33FFFFFF" />
 
-        <!-- All SeekBars (can be hidden) -->
         <LinearLayout
             android:id="@+id/seekBarsContainer"
             android:layout_width="match_parent"
@@ -45,40 +42,26 @@
             android:orientation="vertical">
 
             <TextView android:id="@+id/isoLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ISO: Auto" android:textColor="#FFFFFF" android:textSize="13sp" />
-            <SeekBar android:id="@+id/isoSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-            android:tickMark="@drawable/tick_mark"
-android:tickMarkTint="#88FFFFFF"
+            <SeekBar android:id="@+id/isoSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:tickMark="@drawable/tick_mark" android:tickMarkTint="#88FFFFFF" />
 
             <TextView android:id="@+id/shutterLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Shutter: Auto" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
-            <SeekBar android:id="@+id/shutterSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-            android:tickMark="@drawable/tick_mark"
-android:tickMarkTint="#88FFFFFF"
+            <SeekBar android:id="@+id/shutterSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:tickMark="@drawable/tick_mark" android:tickMarkTint="#88FFFFFF" />
 
             <TextView android:id="@+id/focusLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Focus: Auto" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
-            <SeekBar android:id="@+id/focusSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-            android:tickMark="@drawable/tick_mark"
-android:tickMarkTint="#88FFFFFF"
+            <SeekBar android:id="@+id/focusSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:tickMark="@drawable/tick_mark" android:tickMarkTint="#88FFFFFF" />
 
             <TextView android:id="@+id/wbLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="WB: Auto" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
-            <SeekBar android:id="@+id/wbSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="6" />
-            android:tickMark="@drawable/tick_mark"
-android:tickMarkTint="#88FFFFFF"
+            <SeekBar android:id="@+id/wbSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="6" android:tickMark="@drawable/tick_mark" android:tickMarkTint="#88FFFFFF" />
 
             <TextView android:id="@+id/evLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="EV: 0" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
-            <SeekBar android:id="@+id/evSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="48" />
-            android:tickMark="@drawable/tick_mark"
-android:tickMarkTint="#88FFFFFF"
+            <SeekBar android:id="@+id/evSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="48" android:tickMark="@drawable/tick_mark" android:tickMarkTint="#88FFFFFF" />
 
             <TextView android:id="@+id/zoomLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Zoom: 1.0x" android:textColor="#FFFFFF" android:textSize="13sp" android:layout_marginTop="6dp" />
-            <SeekBar android:id="@+id/zoomSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-            android:tickMark="@drawable/tick_mark"
-android:tickMarkTint="#88FFFFFF"
-           
+            <SeekBar android:id="@+id/zoomSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:tickMark="@drawable/tick_mark" android:tickMarkTint="#88FFFFFF" />
 
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Always visible bottom bar -->
     <LinearLayout
         android:id="@+id/bottomBar"
         android:layout_width="match_parent"
