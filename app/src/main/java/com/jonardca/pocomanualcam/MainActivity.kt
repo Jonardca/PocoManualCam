@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Range
+import android.view.OrientationEventListener
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -78,6 +79,9 @@ class MainActivity : AppCompatActivity() {
     private var isFocusAuto = true
     private var isWbAuto = true
 
+    private var currentJpegOrientation = 90
+    private var orientationEventListener: OrientationEventListener? = null
+
     // Discrete Shutter
     private val shutterSpeeds = arrayOf(
         -1L,
@@ -106,7 +110,6 @@ class MainActivity : AppCompatActivity() {
         "13s", "15s", "20s", "25s", "30s"
     )
 
-    // Kelvin WB
     private val kelvinValues = intArrayOf(
         0,
         2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800,
@@ -142,20 +145,22 @@ class MainActivity : AppCompatActivity() {
 
         shutterSeekBar.max = shutterSpeeds.size - 1
         wbSeekBar.max = kelvinValues.size - 1
-        isoSeekBar.max = 101          // 0 = Auto, 1\~100 = manual
-        focusSeekBar.max = 101        // 0\~100 = manual, 101 = Auto
+        isoSeekBar.max = 100
+        focusSeekBar.max = 100
+
+        setupOrientationListener()
+        setupSeekBars()
+
+        // Defaults → Auto
+        isoSeekBar.progress = 0
+        focusSeekBar.progress = 0
+        shutterSeekBar.progress = 0
+        wbSeekBar.progress = 0
+        evSeekBar.progress = 24
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
         }
-
-        setupSeekBars()
-
-        // Default to Auto
-        isoSeekBar.progress = 0
-        focusSeekBar.progress = 101
-        shutterSeekBar.progress = 0
-        wbSeekBar.progress = 0
 
         captureButton.setOnClickListener { takePhoto() }
         galleryButton.setOnClickListener { openGallery() }
@@ -167,6 +172,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupOrientationListener() {
+        orientationEventListener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+
+                currentJpegOrientation = when {
+                    orientation in 45..134 -> 180
+                    orientation in 135..224 -> 270
+                    orientation in 225..314 -> 0
+                    else -> 90
+                }
+            }
+        }
+        orientationEventListener?.enable()
+    }
+
     private fun setupSeekBars() {
         isoSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -176,7 +197,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     isIsoAuto = false
                     isoRange?.let {
-                        currentIso = it.lower + ((progress - 1) * (it.upper - it.lower) / 100)
+                        currentIso = it.lower + ((progress - 1) * (it.upper - it.lower) / 99)
                         isoLabel.text = "ISO: $currentIso"
                     }
                 }
@@ -203,15 +224,16 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
+        // Focus: 0 = Auto, 1\~100 = manual
         focusSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (progress >= 101) {
+                if (progress == 0) {
                     isFocusAuto = true
                     focusLabel.text = "Focus: Auto"
                 } else {
                     isFocusAuto = false
                     focusRange?.let {
-                        currentFocus = it.lower + (progress * (it.upper - it.lower) / 100f)
+                        currentFocus = it.lower + ((progress - 1) * (it.upper - it.lower) / 99f)
                         focusLabel.text = "Focus: ${"%.2f".format(currentFocus)}"
                     }
                 }
@@ -249,7 +271,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
-        evSeekBar.progress = 24
 
         zoomSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -350,28 +371,15 @@ class MainActivity : AppCompatActivity() {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(texture))
 
-            // ===== Exposure / ISO / Shutter =====
             if (isShutterAuto && isIsoAuto) {
-                // Full Auto AE
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
                 builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
             } else {
-                // Manual
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                if (!isShutterAuto) {
-                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-                } else {
-                    // Shutter auto but ISO manual → still need a value, use a safe default
-                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, 30_000_000L)
-                }
-                if (!isIsoAuto) {
-                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-                } else {
-                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, 100)
-                }
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, if (isShutterAuto) 30_000_000L else currentExposure)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, if (isIsoAuto) 100 else currentIso)
             }
 
-            // ===== Focus =====
             if (isFocusAuto) {
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
             } else {
@@ -379,9 +387,7 @@ class MainActivity : AppCompatActivity() {
                 builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
             }
 
-            // ===== White Balance =====
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
-
             applyZoom(builder)
 
             session.setRepeatingRequest(builder.build(), null, backgroundHandler)
@@ -416,7 +422,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
-            builder.set(CaptureRequest.JPEG_ORIENTATION, 90)
+            builder.set(CaptureRequest.JPEG_ORIENTATION, currentJpegOrientation)
 
             applyZoom(builder)
 
@@ -493,6 +499,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        orientationEventListener?.enable()
         startBackgroundThread()
         if (textureView.isAvailable) openCamera()
         else {
@@ -506,6 +513,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        orientationEventListener?.disable()
         captureSession?.close()
         cameraDevice?.close()
         imageReader?.close()
