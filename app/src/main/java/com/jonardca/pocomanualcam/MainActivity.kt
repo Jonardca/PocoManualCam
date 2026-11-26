@@ -68,22 +68,98 @@ class MainActivity : AppCompatActivity() {
     private var currentIso = 100
     private var currentExposure = 30_000_000L
     private var currentFocus = 0f
-    private var currentWb = CaptureRequest.CONTROL_AWB_MODE_AUTO
+    private var currentWbMode = CaptureRequest.CONTROL_AWB_MODE_AUTO
     private var currentEv = 0
     private var currentZoom = 1.0f
     private var controlsVisible = true
+    private var isShutterAuto = true
+    private var isWbAuto = true
 
-    private val wbModes = arrayOf(
-        CaptureRequest.CONTROL_AWB_MODE_AUTO,
-        CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT,
-        CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
-        CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT,
-        CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT,
-        CaptureRequest.CONTROL_AWB_MODE_TWILIGHT,
-        CaptureRequest.CONTROL_AWB_MODE_SHADE
+    // ========== DISCRETE SHUTTER SPEEDS ==========
+    // Index 0 = Auto
+    private val shutterSpeeds = arrayOf(
+        -1L, // Auto
+        250_000L,      // 1/4000
+        312_500L,      // 1/3200
+        400_000L,      // 1/2500
+        500_000L,      // 1/2000
+        625_000L,      // 1/1600
+        800_000L,      // 1/1250
+        1_000_000L,    // 1/1000
+        1_250_000L,    // 1/800
+        1_562_500L,    // 1/640
+        2_000_000L,    // 1/500
+        2_500_000L,    // 1/400
+        3_125_000L,    // 1/320
+        4_000_000L,    // 1/250
+        5_000_000L,    // 1/200
+        6_250_000L,    // 1/160
+        8_000_000L,    // 1/125
+        10_000_000L,   // 1/100
+        12_500_000L,   // 1/80
+        16_666_667L,   // 1/60
+        20_000_000L,   // 1/50
+        25_000_000L,   // 1/40
+        33_333_333L,   // 1/30
+        40_000_000L,   // 1/25
+        50_000_000L,   // 1/20
+        66_666_667L,   // 1/15
+        76_923_077L,   // 1/13
+        100_000_000L,  // 1/10
+        125_000_000L,  // 1/8
+        166_666_667L,  // 1/6
+        200_000_000L,  // 1/5
+        250_000_000L,  // 1/4
+        300_000_000L,  // 0.3s
+        400_000_000L,  // 0.4s
+        500_000_000L,  // 0.5s
+        600_000_000L,  // 0.6s
+        800_000_000L,  // 0.8s
+        900_000_000L,  // 0.9s
+        1_000_000_000L, // 1s
+        1_300_000_000L, // 1.3s
+        1_600_000_000L, // 1.6s
+        1_800_000_000L, // 1.8s
+        2_000_000_000L, // 2s
+        2_300_000_000L, // 2.3s
+        2_500_000_000L, // 2.5s
+        2_800_000_000L, // 2.8s
+        3_000_000_000L, // 3s
+        3_200_000_000L, // 3.2s
+        3_600_000_000L, // 3.6s
+        3_800_000_000L, // 3.8s
+        4_000_000_000L, // 4s
+        5_000_000_000L, // 5s
+        6_000_000_000L, // 6s
+        8_000_000_000L, // 8s
+        10_000_000_000L, // 10s
+        13_000_000_000L, // 13s
+        15_000_000_000L, // 15s
+        20_000_000_000L, // 20s
+        25_000_000_000L, // 25s
+        30_000_000_000L  // 30s
     )
 
-    private val wbNames = arrayOf("Auto", "Daylight", "Cloudy", "Incandescent", "Fluorescent", "Twilight", "Shade")
+    private val shutterLabels = arrayOf(
+        "Auto",
+        "1/4000", "1/3200", "1/2500", "1/2000", "1/1600", "1/1250", "1/1000",
+        "1/800", "1/640", "1/500", "1/400", "1/320", "1/250", "1/200", "1/160",
+        "1/125", "1/100", "1/80", "1/60", "1/50", "1/40", "1/30", "1/25", "1/20",
+        "1/15", "1/13", "1/10", "1/8", "1/6", "1/5", "1/4",
+        "0.3s", "0.4s", "0.5s", "0.6s", "0.8s", "0.9s", "1s",
+        "1.3s", "1.6s", "1.8s", "2s", "2.3s", "2.5s", "2.8s", "3s",
+        "3.2s", "3.6s", "3.8s", "4s", "5s", "6s", "8s", "10s",
+        "13s", "15s", "20s", "25s", "30s"
+    )
+
+    // ========== WHITE BALANCE (Kelvin) ==========
+    // Index 0 = Auto
+    private val kelvinValues = intArrayOf(
+        0, // Auto
+        2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800,
+        4000, 4200, 4400, 4600, 4800, 5000, 5200, 5400, 5600, 5800,
+        6000, 6200, 6400, 6600, 6800, 7000, 7200, 7400, 7600, 7800, 8000
+    )
 
     private val cameraManager by lazy { getSystemService(CAMERA_SERVICE) as CameraManager }
 
@@ -110,6 +186,10 @@ class MainActivity : AppCompatActivity() {
         galleryButton = findViewById(R.id.galleryButton)
         seekBarsContainer = findViewById(R.id.seekBarsContainer)
         toggleControls = findViewById(R.id.toggleControls)
+
+        // Set correct max values
+        shutterSeekBar.max = shutterSpeeds.size - 1
+        wbSeekBar.max = kelvinValues.size - 1
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
@@ -147,15 +227,16 @@ class MainActivity : AppCompatActivity() {
 
         shutterSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                exposureRange?.let {
-                    val min = it.lower
-                    val max = minOf(it.upper, 1_000_000_000L)
-                    currentExposure = min + (progress * (max - min) / 100)
-                    val text = if (currentExposure >= 1_000_000_000L) String.format("%.1fs", currentExposure / 1_000_000_000.0)
-                               else "1/${(1_000_000_000.0 / currentExposure).toInt()}"
-                    shutterLabel.text = "Shutter: $text"
-                    updatePreview()
+                val index = progress.coerceIn(0, shutterSpeeds.size - 1)
+                if (index == 0) {
+                    isShutterAuto = true
+                    shutterLabel.text = "Shutter: Auto"
+                } else {
+                    isShutterAuto = false
+                    currentExposure = shutterSpeeds[index]
+                    shutterLabel.text = "Shutter: ${shutterLabels[index]}"
                 }
+                updatePreview()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -175,9 +256,17 @@ class MainActivity : AppCompatActivity() {
 
         wbSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val index = progress.coerceIn(0, wbModes.size - 1)
-                currentWb = wbModes[index]
-                wbLabel.text = "WB: ${wbNames[index]}"
+                val index = progress.coerceIn(0, kelvinValues.size - 1)
+                if (index == 0) {
+                    isWbAuto = true
+                    currentWbMode = CaptureRequest.CONTROL_AWB_MODE_AUTO
+                    wbLabel.text = "WB: Auto"
+                } else {
+                    isWbAuto = false
+                    val kelvin = kelvinValues[index]
+                    currentWbMode = kelvinToAwbMode(kelvin)
+                    wbLabel.text = "WB: ${kelvin}K"
+                }
                 updatePreview()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -204,6 +293,19 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+    }
+
+    // Map Kelvin to closest standard AWB mode (most reliable across devices)
+    private fun kelvinToAwbMode(kelvin: Int): Int {
+        return when {
+            kelvin <= 2800 -> CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT
+            kelvin <= 3600 -> CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT
+            kelvin <= 4500 -> CaptureRequest.CONTROL_AWB_MODE_WARM_FLUORESCENT
+            kelvin <= 5500 -> CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT
+            kelvin <= 6500 -> CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
+            kelvin <= 7500 -> CaptureRequest.CONTROL_AWB_MODE_TWILIGHT
+            else -> CaptureRequest.CONTROL_AWB_MODE_SHADE
+        }
     }
 
     private fun openCamera() {
@@ -283,13 +385,18 @@ class MainActivity : AppCompatActivity() {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(texture))
 
-            builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+            if (isShutterAuto) {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            } else {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+            }
+
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWb)
-            builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
             builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
+
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
 
             applyZoom(builder)
@@ -309,13 +416,17 @@ class MainActivity : AppCompatActivity() {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             builder.addTarget(readerSurface)
 
-            builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+            if (isShutterAuto) {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            } else {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+            }
+
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWb)
-            builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
             builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
             builder.set(CaptureRequest.JPEG_ORIENTATION, 90)
 
