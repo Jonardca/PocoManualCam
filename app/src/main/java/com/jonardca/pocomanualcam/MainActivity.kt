@@ -72,72 +72,26 @@ class MainActivity : AppCompatActivity() {
     private var currentEv = 0
     private var currentZoom = 1.0f
     private var controlsVisible = true
+
+    private var isIsoAuto = true
     private var isShutterAuto = true
+    private var isFocusAuto = true
     private var isWbAuto = true
 
-    // ========== DISCRETE SHUTTER SPEEDS ==========
-    // Index 0 = Auto
+    // Discrete Shutter
     private val shutterSpeeds = arrayOf(
-        -1L, // Auto
-        250_000L,      // 1/4000
-        312_500L,      // 1/3200
-        400_000L,      // 1/2500
-        500_000L,      // 1/2000
-        625_000L,      // 1/1600
-        800_000L,      // 1/1250
-        1_000_000L,    // 1/1000
-        1_250_000L,    // 1/800
-        1_562_500L,    // 1/640
-        2_000_000L,    // 1/500
-        2_500_000L,    // 1/400
-        3_125_000L,    // 1/320
-        4_000_000L,    // 1/250
-        5_000_000L,    // 1/200
-        6_250_000L,    // 1/160
-        8_000_000L,    // 1/125
-        10_000_000L,   // 1/100
-        12_500_000L,   // 1/80
-        16_666_667L,   // 1/60
-        20_000_000L,   // 1/50
-        25_000_000L,   // 1/40
-        33_333_333L,   // 1/30
-        40_000_000L,   // 1/25
-        50_000_000L,   // 1/20
-        66_666_667L,   // 1/15
-        76_923_077L,   // 1/13
-        100_000_000L,  // 1/10
-        125_000_000L,  // 1/8
-        166_666_667L,  // 1/6
-        200_000_000L,  // 1/5
-        250_000_000L,  // 1/4
-        300_000_000L,  // 0.3s
-        400_000_000L,  // 0.4s
-        500_000_000L,  // 0.5s
-        600_000_000L,  // 0.6s
-        800_000_000L,  // 0.8s
-        900_000_000L,  // 0.9s
-        1_000_000_000L, // 1s
-        1_300_000_000L, // 1.3s
-        1_600_000_000L, // 1.6s
-        1_800_000_000L, // 1.8s
-        2_000_000_000L, // 2s
-        2_300_000_000L, // 2.3s
-        2_500_000_000L, // 2.5s
-        2_800_000_000L, // 2.8s
-        3_000_000_000L, // 3s
-        3_200_000_000L, // 3.2s
-        3_600_000_000L, // 3.6s
-        3_800_000_000L, // 3.8s
-        4_000_000_000L, // 4s
-        5_000_000_000L, // 5s
-        6_000_000_000L, // 6s
-        8_000_000_000L, // 8s
-        10_000_000_000L, // 10s
-        13_000_000_000L, // 13s
-        15_000_000_000L, // 15s
-        20_000_000_000L, // 20s
-        25_000_000_000L, // 25s
-        30_000_000_000L  // 30s
+        -1L,
+        250_000L, 312_500L, 400_000L, 500_000L, 625_000L, 800_000L, 1_000_000L,
+        1_250_000L, 1_562_500L, 2_000_000L, 2_500_000L, 3_125_000L, 4_000_000L,
+        5_000_000L, 6_250_000L, 8_000_000L, 10_000_000L, 12_500_000L, 16_666_667L,
+        20_000_000L, 25_000_000L, 33_333_333L, 40_000_000L, 50_000_000L, 66_666_667L,
+        76_923_077L, 100_000_000L, 125_000_000L, 166_666_667L, 200_000_000L, 250_000_000L,
+        300_000_000L, 400_000_000L, 500_000_000L, 600_000_000L, 800_000_000L, 900_000_000L,
+        1_000_000_000L, 1_300_000_000L, 1_600_000_000L, 1_800_000_000L, 2_000_000_000L,
+        2_300_000_000L, 2_500_000_000L, 2_800_000_000L, 3_000_000_000L, 3_200_000_000L,
+        3_600_000_000L, 3_800_000_000L, 4_000_000_000L, 5_000_000_000L, 6_000_000_000L,
+        8_000_000_000L, 10_000_000_000L, 13_000_000_000L, 15_000_000_000L, 20_000_000_000L,
+        25_000_000_000L, 30_000_000_000L
     )
 
     private val shutterLabels = arrayOf(
@@ -152,10 +106,9 @@ class MainActivity : AppCompatActivity() {
         "13s", "15s", "20s", "25s", "30s"
     )
 
-    // ========== WHITE BALANCE (Kelvin) ==========
-    // Index 0 = Auto
+    // Kelvin WB
     private val kelvinValues = intArrayOf(
-        0, // Auto
+        0,
         2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800,
         4000, 4200, 4400, 4600, 4800, 5000, 5200, 5400, 5600, 5800,
         6000, 6200, 6400, 6600, 6800, 7000, 7200, 7400, 7600, 7800, 8000
@@ -187,9 +140,10 @@ class MainActivity : AppCompatActivity() {
         seekBarsContainer = findViewById(R.id.seekBarsContainer)
         toggleControls = findViewById(R.id.toggleControls)
 
-        // Set correct max values
         shutterSeekBar.max = shutterSpeeds.size - 1
         wbSeekBar.max = kelvinValues.size - 1
+        isoSeekBar.max = 101          // 0 = Auto, 1\~100 = manual
+        focusSeekBar.max = 101        // 0\~100 = manual, 101 = Auto
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
@@ -197,29 +151,36 @@ class MainActivity : AppCompatActivity() {
 
         setupSeekBars()
 
+        // Default to Auto
+        isoSeekBar.progress = 0
+        focusSeekBar.progress = 101
+        shutterSeekBar.progress = 0
+        wbSeekBar.progress = 0
+
         captureButton.setOnClickListener { takePhoto() }
         galleryButton.setOnClickListener { openGallery() }
 
         toggleControls.setOnClickListener {
             controlsVisible = !controlsVisible
-            if (controlsVisible) {
-                seekBarsContainer.visibility = View.VISIBLE
-                toggleControls.text = "▲ Hide Controls"
-            } else {
-                seekBarsContainer.visibility = View.GONE
-                toggleControls.text = "▼ Show Controls"
-            }
+            seekBarsContainer.visibility = if (controlsVisible) View.VISIBLE else View.GONE
+            toggleControls.text = if (controlsVisible) "▲ Hide Controls" else "▼ Show Controls"
         }
     }
 
     private fun setupSeekBars() {
         isoSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                isoRange?.let {
-                    currentIso = it.lower + (progress * (it.upper - it.lower) / 100)
-                    isoLabel.text = "ISO: $currentIso"
-                    updatePreview()
+                if (progress == 0) {
+                    isIsoAuto = true
+                    isoLabel.text = "ISO: Auto"
+                } else {
+                    isIsoAuto = false
+                    isoRange?.let {
+                        currentIso = it.lower + ((progress - 1) * (it.upper - it.lower) / 100)
+                        isoLabel.text = "ISO: $currentIso"
+                    }
                 }
+                updatePreview()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -244,11 +205,17 @@ class MainActivity : AppCompatActivity() {
 
         focusSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                focusRange?.let {
-                    currentFocus = it.lower + (progress * (it.upper - it.lower) / 100f)
-                    focusLabel.text = "Focus: ${"%.2f".format(currentFocus)}"
-                    updatePreview()
+                if (progress >= 101) {
+                    isFocusAuto = true
+                    focusLabel.text = "Focus: Auto"
+                } else {
+                    isFocusAuto = false
+                    focusRange?.let {
+                        currentFocus = it.lower + (progress * (it.upper - it.lower) / 100f)
+                        focusLabel.text = "Focus: ${"%.2f".format(currentFocus)}"
+                    }
                 }
+                updatePreview()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -295,7 +262,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // Map Kelvin to closest standard AWB mode (most reliable across devices)
     private fun kelvinToAwbMode(kelvin: Int): Int {
         return when {
             kelvin <= 2800 -> CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT
@@ -365,7 +331,6 @@ class MainActivity : AppCompatActivity() {
             val centerY = rect.height() / 2
             val halfWidth = (rect.width() / (2 * currentZoom)).toInt().coerceAtLeast(1)
             val halfHeight = (rect.height() / (2 * currentZoom)).toInt().coerceAtLeast(1)
-
             val crop = Rect(
                 (centerX - halfWidth).coerceAtLeast(0),
                 (centerY - halfHeight).coerceAtLeast(0),
@@ -385,19 +350,37 @@ class MainActivity : AppCompatActivity() {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(texture))
 
-            if (isShutterAuto) {
+            // ===== Exposure / ISO / Shutter =====
+            if (isShutterAuto && isIsoAuto) {
+                // Full Auto AE
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
             } else {
+                // Manual
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+                if (!isShutterAuto) {
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+                } else {
+                    // Shutter auto but ISO manual → still need a value, use a safe default
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, 30_000_000L)
+                }
+                if (!isIsoAuto) {
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+                } else {
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, 100)
+                }
             }
 
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
+            // ===== Focus =====
+            if (isFocusAuto) {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            } else {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
+            }
 
+            // ===== White Balance =====
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
-            builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
 
             applyZoom(builder)
 
@@ -416,18 +399,23 @@ class MainActivity : AppCompatActivity() {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             builder.addTarget(readerSurface)
 
-            if (isShutterAuto) {
+            if (isShutterAuto && isIsoAuto) {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
             } else {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, if (isShutterAuto) 30_000_000L else currentExposure)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, if (isIsoAuto) 100 else currentIso)
             }
 
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
+            if (isFocusAuto) {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            } else {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocus)
+            }
+
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
-            builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, currentEv)
             builder.set(CaptureRequest.JPEG_ORIENTATION, 90)
 
             applyZoom(builder)
