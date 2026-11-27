@@ -2,11 +2,19 @@ package com.jonardca.pocomanualcam
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.hardware.camera2.*
 import android.media.ImageReader
 import android.os.Build
@@ -28,12 +36,15 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
+import kotlin.math.atan2
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var textureView: TextureView
     private lateinit var isoSeekBar: SeekBar
@@ -52,8 +63,11 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var captureButton: Button
     private lateinit var galleryButton: Button
+    private lateinit var ratioButton: Button
     private lateinit var seekBarsContainer: LinearLayout
     private lateinit var toggleControls: TextView
+    private lateinit var crossVertical: View
+    private lateinit var crossHorizontal: View
 
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
@@ -73,16 +87,18 @@ class MainActivity : AppCompatActivity() {
     private var currentEv = 0
     private var currentZoom = 1.0f
     private var controlsVisible = true
+    private var isFourFive = false
 
     private var isIsoAuto = true
     private var isShutterAuto = true
     private var isFocusAuto = true
-    private var isWbAuto = true
 
     private var currentJpegOrientation = 90
     private var orientationEventListener: OrientationEventListener? = null
 
-    // Discrete Shutter
+    private lateinit var sensorManager: SensorManager
+    private var accelerometer: Sensor? = null
+
     private val shutterSpeeds = arrayOf(
         -1L,
         250_000L, 312_500L, 400_000L, 500_000L, 625_000L, 800_000L, 1_000_000L,
@@ -111,8 +127,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     private val kelvinValues = intArrayOf(
-        0,
-        2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800,
+        0, 2000, 2200, 2400, 2600, 2800, 3000, 3200, 3400, 3600, 3800,
         4000, 4200, 4400, 4600, 4800, 5000, 5200, 5400, 5600, 5800,
         6000, 6200, 6400, 6600, 6800, 7000, 7200, 7400, 7600, 7800, 8000
     )
@@ -140,23 +155,30 @@ class MainActivity : AppCompatActivity() {
 
         captureButton = findViewById(R.id.captureButton)
         galleryButton = findViewById(R.id.galleryButton)
+        ratioButton = findViewById(R.id.ratioButton)
         seekBarsContainer = findViewById(R.id.seekBarsContainer)
         toggleControls = findViewById(R.id.toggleControls)
+        crossVertical = findViewById(R.id.crossVertical)
+        crossHorizontal = findViewById(R.id.crossHorizontal)
 
         shutterSeekBar.max = shutterSpeeds.size - 1
         wbSeekBar.max = kelvinValues.size - 1
         isoSeekBar.max = 100
         focusSeekBar.max = 100
+        zoomSeekBar.max = 100
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         setupOrientationListener()
         setupSeekBars()
 
-        // Defaults → Auto
         isoSeekBar.progress = 0
         focusSeekBar.progress = 0
         shutterSeekBar.progress = 0
         wbSeekBar.progress = 0
         evSeekBar.progress = 24
+        zoomSeekBar.progress = 0
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
@@ -164,6 +186,12 @@ class MainActivity : AppCompatActivity() {
 
         captureButton.setOnClickListener { takePhoto() }
         galleryButton.setOnClickListener { openGallery() }
+
+        ratioButton.setOnClickListener {
+            isFourFive = !isFourFive
+            ratioButton.text = if (isFourFive) "4:5" else "3:4"
+            ratioButton.setBackgroundColor(if (isFourFive) Color.parseColor("#4CAF50") else Color.parseColor("#666666"))
+        }
 
         toggleControls.setOnClickListener {
             controlsVisible = !controlsVisible
@@ -176,7 +204,6 @@ class MainActivity : AppCompatActivity() {
         orientationEventListener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
-
                 currentJpegOrientation = when {
                     orientation in 45..134 -> 180
                     orientation in 135..224 -> 270
@@ -185,7 +212,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        orientationEventListener?.enable()
     }
 
     private fun setupSeekBars() {
@@ -224,7 +250,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // Focus: 0 = Auto, 1\~100 = manual
         focusSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (progress == 0) {
@@ -247,11 +272,9 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val index = progress.coerceIn(0, kelvinValues.size - 1)
                 if (index == 0) {
-                    isWbAuto = true
                     currentWbMode = CaptureRequest.CONTROL_AWB_MODE_AUTO
                     wbLabel.text = "WB: Auto"
                 } else {
-                    isWbAuto = false
                     val kelvin = kelvinValues[index]
                     currentWbMode = kelvinToAwbMode(kelvin)
                     wbLabel.text = "WB: ${kelvin}K"
@@ -274,7 +297,7 @@ class MainActivity : AppCompatActivity() {
 
         zoomSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                currentZoom = 1.0f + (progress / 100f) * 3.0f
+                currentZoom = 1.0f + (progress / 100f) * 9.0f   // 1x to 10x
                 zoomLabel.text = "Zoom: ${"%.1f".format(currentZoom)}x"
                 updatePreview()
             }
@@ -294,6 +317,23 @@ class MainActivity : AppCompatActivity() {
             else -> CaptureRequest.CONTROL_AWB_MODE_SHADE
         }
     }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
+        val x = event.values[0]
+        val y = event.values[1]
+        val angle = Math.toDegrees(atan2(x.toDouble(), y.toDouble())).toFloat()
+
+        // Rotate horizontal crosshair
+        crossHorizontal.rotation = -angle
+
+        // Green when almost level (±2 degrees)
+        val isLevel = abs(angle) < 2.5f
+        crossHorizontal.setBackgroundColor(if (isLevel) Color.GREEN else Color.WHITE)
+        crossVertical.setBackgroundColor(if (isLevel) Color.GREEN else Color.WHITE)
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun openCamera() {
         try {
@@ -423,7 +463,6 @@ class MainActivity : AppCompatActivity() {
 
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
             builder.set(CaptureRequest.JPEG_ORIENTATION, currentJpegOrientation)
-
             applyZoom(builder)
 
             session.capture(builder.build(), null, backgroundHandler)
@@ -439,6 +478,29 @@ class MainActivity : AppCompatActivity() {
         buffer.get(bytes)
         image.close()
 
+        var finalBytes = bytes
+
+        // 4:5 crop if enabled
+        if (isFourFive) {
+            try {
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap != null) {
+                    val width = bitmap.width
+                    val height = bitmap.height
+                    val targetHeight = (width * 5) / 4
+                    val y = ((height - targetHeight) / 2).coerceAtLeast(0)
+                    val cropped = Bitmap.createBitmap(bitmap, 0, y, width, targetHeight.coerceAtMost(height - y))
+                    val stream = ByteArrayOutputStream()
+                    cropped.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+                    finalBytes = stream.toByteArray()
+                    bitmap.recycle()
+                    cropped.recycle()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         val filename = "MANUAL_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
 
         try {
@@ -449,12 +511,12 @@ class MainActivity : AppCompatActivity() {
                     put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/PocoManualCam")
                 }
                 contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)?.let { uri ->
-                    contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    contentResolver.openOutputStream(uri)?.use { it.write(finalBytes) }
                 }
             } else {
                 val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "PocoManualCam")
                 if (!dir.exists()) dir.mkdirs()
-                FileOutputStream(File(dir, filename)).use { it.write(bytes) }
+                FileOutputStream(File(dir, filename)).use { it.write(finalBytes) }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -470,11 +532,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(miuiIntent)
         } catch (e: Exception) {
             try {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    type = "image/*"
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                startActivity(Intent.createChooser(intent, "Open Gallery"))
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW).apply { type = "image/*" }, "Open Gallery"))
             } catch (e2: Exception) {
                 Toast.makeText(this, "Cannot open gallery", Toast.LENGTH_SHORT).show()
             }
@@ -500,6 +558,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         orientationEventListener?.enable()
+        accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
         startBackgroundThread()
         if (textureView.isAvailable) openCamera()
         else {
@@ -514,6 +573,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         orientationEventListener?.disable()
+        sensorManager.unregisterListener(this)
         captureSession?.close()
         cameraDevice?.close()
         imageReader?.close()
