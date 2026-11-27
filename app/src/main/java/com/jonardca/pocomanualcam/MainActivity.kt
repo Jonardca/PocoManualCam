@@ -47,6 +47,7 @@ import kotlin.math.atan2
 class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var textureView: TextureView
+    private lateinit var aspectOverlay: AspectRatioOverlayView
     private lateinit var isoSeekBar: SeekBar
     private lateinit var shutterSeekBar: SeekBar
     private lateinit var focusSeekBar: SeekBar
@@ -64,6 +65,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var captureButton: Button
     private lateinit var galleryButton: Button
     private lateinit var ratioButton: Button
+    private lateinit var btnRatioGuide: Button
     private lateinit var seekBarsContainer: LinearLayout
     private lateinit var toggleControls: TextView
     private lateinit var crossVertical: View
@@ -87,7 +89,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var currentEv = 0
     private var currentZoom = 1.0f
     private var controlsVisible = true
-    private var isFourFive = false
+    private var isFourFive = false          // actual crop on save
+    private var isFourFiveGuide = false     // visual guide only
 
     private var isIsoAuto = true
     private var isShutterAuto = true
@@ -139,6 +142,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         setContentView(R.layout.activity_main)
 
         textureView = findViewById(R.id.textureView)
+        aspectOverlay = findViewById(R.id.aspectOverlay)
         isoSeekBar = findViewById(R.id.isoSeekBar)
         shutterSeekBar = findViewById(R.id.shutterSeekBar)
         focusSeekBar = findViewById(R.id.focusSeekBar)
@@ -156,6 +160,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         captureButton = findViewById(R.id.captureButton)
         galleryButton = findViewById(R.id.galleryButton)
         ratioButton = findViewById(R.id.ratioButton)
+        btnRatioGuide = findViewById(R.id.btnRatioGuide)
         seekBarsContainer = findViewById(R.id.seekBarsContainer)
         toggleControls = findViewById(R.id.toggleControls)
         crossVertical = findViewById(R.id.crossVertical)
@@ -187,10 +192,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         captureButton.setOnClickListener { takePhoto() }
         galleryButton.setOnClickListener { openGallery() }
 
+        // Bottom ratio button → actual crop on save
         ratioButton.setOnClickListener {
             isFourFive = !isFourFive
             ratioButton.text = if (isFourFive) "4:5" else "3:4"
             ratioButton.setBackgroundColor(if (isFourFive) Color.parseColor("#4CAF50") else Color.parseColor("#666666"))
+        }
+
+        // Top bar 4:5 Guide toggle (visual only)
+        btnRatioGuide.setOnClickListener {
+            isFourFiveGuide = !isFourFiveGuide
+            aspectOverlay.isFourFiveEnabled = isFourFiveGuide
+            btnRatioGuide.text = if (isFourFiveGuide) "4:5 Guide" else "3:4"
+            btnRatioGuide.setBackgroundColor(if (isFourFiveGuide) Color.parseColor("#4CAF50") else Color.parseColor("#555555"))
         }
 
         toggleControls.setOnClickListener {
@@ -297,7 +311,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         zoomSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                currentZoom = 1.0f + (progress / 100f) * 9.0f   // 1x to 10x
+                currentZoom = 1.0f + (progress / 100f) * 9.0f
                 zoomLabel.text = "Zoom: ${"%.1f".format(currentZoom)}x"
                 updatePreview()
             }
@@ -324,13 +338,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val y = event.values[1]
         val angle = Math.toDegrees(atan2(x.toDouble(), y.toDouble())).toFloat()
 
-        // Rotate horizontal crosshair
         crossHorizontal.rotation = -angle
-
-        // Green when almost level (±2 degrees)
         val isLevel = abs(angle) < 2.5f
-        crossHorizontal.setBackgroundColor(if (isLevel) Color.GREEN else Color.WHITE)
-        crossVertical.setBackgroundColor(if (isLevel) Color.GREEN else Color.WHITE)
+        val color = if (isLevel) Color.GREEN else Color.WHITE
+        crossHorizontal.setBackgroundColor(color)
+        crossVertical.setBackgroundColor(color)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -480,7 +492,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         var finalBytes = bytes
 
-        // 4:5 crop if enabled
         if (isFourFive) {
             try {
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
