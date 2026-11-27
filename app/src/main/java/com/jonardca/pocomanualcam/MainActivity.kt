@@ -5,11 +5,11 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.ImageFormat
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var galleryButton: Button
     private lateinit var ratioButton: Button
     private lateinit var btnRatioGuide: Button
+    private lateinit var btnFaceDetect: Button
     private lateinit var seekBarsContainer: LinearLayout
     private lateinit var toggleControls: TextView
     private lateinit var crossVertical: View
@@ -81,6 +82,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var exposureRange: Range<Long>? = null
     private var focusRange: Range<Float>? = null
     private var sensorRect: Rect? = null
+    private var sensorOrientation = 90
 
     private var currentIso = 100
     private var currentExposure = 30_000_000L
@@ -89,8 +91,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var currentEv = 0
     private var currentZoom = 1.0f
     private var controlsVisible = true
-    private var isFourFive = false          // actual crop on save
-    private var isFourFiveGuide = false     // visual guide only
+    private var isFourFive = false
+    private var isFourFiveGuide = false
+    private var isFaceDetectEnabled = false
 
     private var isIsoAuto = true
     private var isShutterAuto = true
@@ -137,6 +140,37 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private val cameraManager by lazy { getSystemService(CAMERA_SERVICE) as CameraManager }
 
+    private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(
+            session: CameraCaptureSession,
+            request: CaptureRequest,
+            result: TotalCaptureResult
+        ) {
+            if (!isFaceDetectEnabled) {
+                runOnUiThread { aspectOverlay.clearFaceBoxes() }
+                return
+            }
+
+            val faces = result.get(CaptureResult.STATISTICS_FACES) ?: return
+            val activeArray = sensorRect ?: return
+            val viewW = textureView.width
+            val viewH = textureView.height
+            if (viewW == 0 || viewH == 0) return
+
+            val boxes = mutableListOf<RectF>()
+
+            for (face in faces) {
+                val bounds = face.bounds
+                val mapped = mapSensorRectToView(bounds, activeArray, viewW, viewH, sensorOrientation)
+                if (mapped != null) boxes.add(mapped)
+            }
+
+            runOnUiThread {
+                aspectOverlay.updateFaceBoxes(boxes)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -161,10 +195,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         galleryButton = findViewById(R.id.galleryButton)
         ratioButton = findViewById(R.id.ratioButton)
         btnRatioGuide = findViewById(R.id.btnRatioGuide)
+        btnFaceDetect = findViewById(R.id.btnFaceDetect)
         seekBarsContainer = findViewById(R.id.seekBarsContainer)
         toggleControls = findViewById(R.id.toggleControls)
         crossVertical = findViewById(R.id.crossVertical)
         crossHorizontal = findViewById(R.id.crossHorizontal)
+
+        // Enable Face button
+        btnFaceDetect.isEnabled = true
 
         shutterSeekBar.max = shutterSpeeds.size - 1
         wbSeekBar.max = kelvinValues.size - 1
@@ -192,14 +230,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         captureButton.setOnClickListener { takePhoto() }
         galleryButton.setOnClickListener { openGallery() }
 
-        // Bottom ratio button → actual crop on save
         ratioButton.setOnClickListener {
             isFourFive = !isFourFive
             ratioButton.text = if (isFourFive) "4:5" else "3:4"
             ratioButton.setBackgroundColor(if (isFourFive) Color.parseColor("#4CAF50") else Color.parseColor("#666666"))
         }
 
-        // Top bar 4:5 Guide toggle (visual only)
         btnRatioGuide.setOnClickListener {
             isFourFiveGuide = !isFourFiveGuide
             aspectOverlay.isFourFiveEnabled = isFourFiveGuide
@@ -207,11 +243,65 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             btnRatioGuide.setBackgroundColor(if (isFourFiveGuide) Color.parseColor("#4CAF50") else Color.parseColor("#555555"))
         }
 
+        btnFaceDetect.setOnClickListener {
+            isFaceDetectEnabled = !isFaceDetectEnabled
+            btnFaceDetect.text = if (isFaceDetectEnabled) "Face ON" else "Face"
+            btnFaceDetect.setBackgroundColor(if (isFaceDetectEnabled) Color.parseColor("#4CAF50") else Color.parseColor("#555555"))
+            if (!isFaceDetectEnabled) aspectOverlay.clearFaceBoxes()
+            updatePreview()
+        }
+
         toggleControls.setOnClickListener {
             controlsVisible = !controlsVisible
             seekBarsContainer.visibility = if (controlsVisible) View.VISIBLE else View.GONE
             toggleControls.text = if (controlsVisible) "▲ Hide Controls" else "▼ Show Controls"
         }
+    }
+
+    private fun mapSensorRectToView(
+        sensorFace: Rect,
+        activeArray: Rect,
+        viewW: Int,
+        viewH: Int,
+        orientation: Int
+    ): RectF? {
+        val sensorW = activeArray.width().toFloat()
+        val sensorH = activeArray.height().toFloat()
+        if (sensorW <= 0 || sensorH <= 0) return null
+
+        val left: Float
+        val top: Float
+        val right: Float
+        val bottom: Float
+
+        when (orientation) {
+            90 -> {
+                val scaleX = viewW / sensorH
+                val scaleY = viewH / sensorW
+                left = (sensorH - sensorFace.bottom) * scaleX
+                top = sensorFace.left * scaleY
+                right = (sensorH - sensorFace.top) * scaleX
+                bottom = sensorFace.right * scaleY
+            }
+            270 -> {
+                val scaleX = viewW / sensorH
+                val scaleY = viewH / sensorW
+                left = sensorFace.top * scaleX
+                top = (sensorW - sensorFace.right) * scaleY
+                right = sensorFace.bottom * scaleX
+                bottom = (sensorW - sensorFace.left) * scaleY
+            }
+            else -> {
+                val scaleX = viewW / sensorW
+                val scaleY = viewH / sensorH
+                left = sensorFace.left * scaleX
+                top = sensorFace.top * scaleY
+                right = sensorFace.right * scaleX
+                bottom = sensorFace.bottom * scaleY
+            }
+        }
+
+        return RectF(left, top, right, bottom)
     }
 
     private fun setupOrientationListener() {
@@ -337,7 +427,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val x = event.values[0]
         val y = event.values[1]
         val angle = Math.toDegrees(atan2(x.toDouble(), y.toDouble())).toFloat()
-
         crossHorizontal.rotation = -angle
         val isLevel = abs(angle) < 2.5f
         val color = if (isLevel) Color.GREEN else Color.WHITE
@@ -357,6 +446,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             val minFocus = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
             focusRange = Range(0f, minFocus)
             sensorRect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+            sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
 
             imageReader = ImageReader.newInstance(3472, 4624, ImageFormat.JPEG, 2)
             imageReader?.setOnImageAvailableListener({ reader ->
@@ -440,9 +530,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             }
 
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
+
+            // Face Detection
+            if (isFaceDetectEnabled) {
+                builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE)
+            } else {
+                builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF)
+            }
+
             applyZoom(builder)
 
-            session.setRepeatingRequest(builder.build(), null, backgroundHandler)
+            session.setRepeatingRequest(builder.build(), captureCallback, backgroundHandler)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -500,9 +598,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     val height = bitmap.height
                     val targetHeight = (width * 5) / 4
                     val y = ((height - targetHeight) / 2).coerceAtLeast(0)
-                    val cropped = Bitmap.createBitmap(bitmap, 0, y, width, targetHeight.coerceAtMost(height - y))
+                    val cropped = android.graphics.Bitmap.createBitmap(bitmap, 0, y, width, targetHeight.coerceAtMost(height - y))
                     val stream = ByteArrayOutputStream()
-                    cropped.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+                    cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, stream)
                     finalBytes = stream.toByteArray()
                     bitmap.recycle()
                     cropped.recycle()
