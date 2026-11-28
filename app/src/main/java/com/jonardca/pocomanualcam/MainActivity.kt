@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var ratioButton: Button
     private lateinit var btnRatioGuide: Button
     private lateinit var btnFaceDetect: Button
+    private lateinit var btnMotionTrack: Button
     private lateinit var seekBarsContainer: LinearLayout
     private lateinit var toggleControls: TextView
     private lateinit var crossVertical: View
@@ -77,12 +78,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var backgroundHandler: Handler? = null
     private var backgroundThread: HandlerThread? = null
     private var imageReader: ImageReader? = null
+    private var motionImageReader: ImageReader? = null
 
     private var isoRange: Range<Int>? = null
     private var exposureRange: Range<Long>? = null
     private var focusRange: Range<Float>? = null
     private var sensorRect: Rect? = null
     private var sensorOrientation = 90
+    private var currentCropRegion: Rect? = null
 
     private var currentIso = 100
     private var currentExposure = 30_000_000L
@@ -94,6 +97,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var isFourFive = false
     private var isFourFiveGuide = false
     private var isFaceDetectEnabled = false
+    private var isMotionTrackEnabled = false
 
     private var isIsoAuto = true
     private var isShutterAuto = true
@@ -101,6 +105,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private var currentJpegOrientation = 90
     private var orientationEventListener: OrientationEventListener? = null
+    private var motionDetector: MotionFocusDetector? = null
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
@@ -146,10 +151,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             request: CaptureRequest,
             result: TotalCaptureResult
         ) {
-            if (!isFaceDetectEnabled) {
-                runOnUiThread { aspectOverlay.clearFaceBoxes() }
-                return
-            }
+            if (!isFaceDetectEnabled) return
 
             val faces = result.get(CaptureResult.STATISTICS_FACES) ?: return
             val activeArray = sensorRect ?: return
@@ -158,16 +160,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             if (viewW == 0 || viewH == 0) return
 
             val boxes = mutableListOf<RectF>()
-
             for (face in faces) {
-                val bounds = face.bounds
-                val mapped = mapSensorRectToView(bounds, activeArray, viewW, viewH, sensorOrientation)
-                if (mapped != null) boxes.add(mapped)
+                mapSensorRectToView(face.bounds, activeArray, viewW, viewH, sensorOrientation)?.let {
+                    boxes.add(it)
+                }
             }
-
-            runOnUiThread {
-                aspectOverlay.updateFaceBoxes(boxes)
-            }
+            runOnUiThread { aspectOverlay.updateFaceBoxes(boxes) }
         }
     }
 
@@ -196,13 +194,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         ratioButton = findViewById(R.id.ratioButton)
         btnRatioGuide = findViewById(R.id.btnRatioGuide)
         btnFaceDetect = findViewById(R.id.btnFaceDetect)
+        btnMotionTrack = findViewById(R.id.btnMotionTrack)
         seekBarsContainer = findViewById(R.id.seekBarsContainer)
         toggleControls = findViewById(R.id.toggleControls)
         crossVertical = findViewById(R.id.crossVertical)
         crossHorizontal = findViewById(R.id.crossHorizontal)
 
-        // Enable Face button
         btnFaceDetect.isEnabled = true
+        btnMotionTrack.isEnabled = true
 
         shutterSeekBar.max = shutterSpeeds.size - 1
         wbSeekBar.max = kelvinValues.size - 1
@@ -249,6 +248,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             btnFaceDetect.setBackgroundColor(if (isFaceDetectEnabled) Color.parseColor("#4CAF50") else Color.parseColor("#555555"))
             if (!isFaceDetectEnabled) aspectOverlay.clearFaceBoxes()
             updatePreview()
+        }
+
+        btnMotionTrack.setOnClickListener {
+            isMotionTrackEnabled = !isMotionTrackEnabled
+            btnMotionTrack.text = if (isMotionTrackEnabled) "Track ON" else "Track"
+            btnMotionTrack.setBackgroundColor(if (isMotionTrackEnabled) Color.parseColor("#4CAF50") else Color.parseColor("#555555"))
+            if (!isMotionTrackEnabled) {
+                motionDetector?.reset()
+                aspectOverlay.clearFaceBoxes()
+            }
         }
 
         toggleControls.setOnClickListener {
@@ -300,8 +309,20 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 bottom = sensorFace.bottom * scaleY
             }
         }
-
         return RectF(left, top, right, bottom)
+    }
+
+    private fun mapPreviewBoxToView(previewBox: Rect, previewW: Int, previewH: Int): RectF {
+        val viewW = textureView.width.toFloat()
+        val viewH = textureView.height.toFloat()
+        val scaleX = viewW / previewW
+        val scaleY = viewH / previewH
+        return RectF(
+            previewBox.left * scaleX,
+            previewBox.top * scaleY,
+            previewBox.right * scaleX,
+            previewBox.bottom * scaleY
+        )
     }
 
     private fun setupOrientationListener() {
@@ -448,9 +469,35 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             sensorRect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
             sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
 
+            sensorRect?.let {
+                motionDetector = MotionFocusDetector(it)
+            }
+
             imageReader = ImageReader.newInstance(3472, 4624, ImageFormat.JPEG, 2)
             imageReader?.setOnImageAvailableListener({ reader ->
                 reader.acquireLatestImage()?.let { saveImage(it) }
+            }, backgroundHandler)
+
+            // Low-res for motion detection
+            motionImageReader = ImageReader.newInstance(320, 240, ImageFormat.YUV_420_888, 2)
+            motionImageReader?.setOnImageAvailableListener({ reader ->
+                if (!isMotionTrackEnabled) {
+                    reader.acquireLatestImage()?.close()
+                    return@setOnImageAvailableListener
+                }
+                val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                try {
+                    val result = motionDetector?.processFrame(image, currentCropRegion)
+                    if (result != null) {
+                        val (previewBox, _) = result
+                        val screenBox = mapPreviewBoxToView(previewBox, 320, 240)
+                        runOnUiThread {
+                            aspectOverlay.updateFaceBoxes(listOf(screenBox))
+                        }
+                    }
+                } finally {
+                    image.close()
+                }
             }, backgroundHandler)
 
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
@@ -473,9 +520,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         texture.setDefaultBufferSize(1920, 1080)
         val previewSurface = Surface(texture)
         val readerSurface = imageReader?.surface ?: return
+        val motionSurface = motionImageReader?.surface ?: return
 
         try {
-            cameraDevice?.createCaptureSession(listOf(previewSurface, readerSurface),
+            cameraDevice?.createCaptureSession(
+                listOf(previewSurface, readerSurface, motionSurface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         captureSession = session
@@ -500,6 +549,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 (centerX + halfWidth).coerceAtMost(rect.width()),
                 (centerY + halfHeight).coerceAtMost(rect.height())
             )
+            currentCropRegion = crop
             builder.set(CaptureRequest.SCALER_CROP_REGION, crop)
         }
     }
@@ -512,6 +562,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         try {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(texture))
+            motionImageReader?.surface?.let { builder.addTarget(it) }
 
             if (isShutterAuto && isIsoAuto) {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
@@ -531,7 +582,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
             builder.set(CaptureRequest.CONTROL_AWB_MODE, currentWbMode)
 
-            // Face Detection
             if (isFaceDetectEnabled) {
                 builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE)
             } else {
@@ -686,6 +736,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         captureSession?.close()
         cameraDevice?.close()
         imageReader?.close()
+        motionImageReader?.close()
         stopBackgroundThread()
         super.onPause()
     }
